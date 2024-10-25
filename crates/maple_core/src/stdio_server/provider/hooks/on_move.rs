@@ -434,30 +434,39 @@ impl<'a> CachedPreviewImpl<'a> {
                 );
             }
         };
+let (lines, fname) = match (self.ctx.env.is_nvim, self.ctx.env.has_nvim_09) {
+    (true, false) => {
+        // Title is not available before nvim 0.9
+        let max_fname_len = self.ctx.env.display_line_width - 1;
+        previewer::preview_file_with_truncated_title(
+            path,
+            self.preview_height,
+            self.max_line_width(),
+            max_fname_len,
+        )
+        .map_err(|e| {
+            handle_io_error(&e);
+            e
+        })?
+    }
+    _ => {
+        let (lines, abs_path) = previewer::preview_file(
+            path,
+            self.preview_height,
+            self.max_line_width()
+        )
+        .map_err(|e| {
+            handle_io_error(&e);
+            e
+        })?;
+        // cwd is shown via the popup title, no need to include it again.
+        let cwd_relative = abs_path.replacen(self.ctx.cwd.as_str(), ".", 1);
+        let mut lines = lines;
+        lines[0] = cwd_relative;
+        (lines, abs_path)
+    }
+};
 
-        let (lines, fname) = match (self.ctx.env.is_nvim, self.ctx.env.has_nvim_09) {
-            (true, false) => {
-                // Title is not available before nvim 0.9
-                let max_fname_len = self.ctx.env.display_line_width - 1;
-                previewer::preview_file_with_truncated_title(
-                    path,
-                    self.preview_height,
-                    self.max_line_width(),
-                    max_fname_len,
-                )
-                .inspect_err(handle_io_error)?
-            }
-            _ => {
-                let (lines, abs_path) =
-                    previewer::preview_file(path, self.preview_height, self.max_line_width())
-                        .inspect_err(handle_io_error)?;
-                // cwd is shown via the popup title, no need to include it again.
-                let cwd_relative = abs_path.replacen(self.ctx.cwd.as_str(), ".", 1);
-                let mut lines = lines;
-                lines[0] = cwd_relative;
-                (lines, abs_path)
-            }
-        };
 
         let sublime_or_ts_highlights = SyntaxHighlighter {
             lines: lines.clone(),
